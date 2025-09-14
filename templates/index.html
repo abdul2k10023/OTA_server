@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 OTA and Motor Control</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+
+    <h1>ESP32 OTA Update & Motor Control</h1>
+
+    <!-- Upload firmware -->
+    <h2>Upload Firmware</h2>
+    <form id="firmware-form" enctype="multipart/form-data">
+        <input type="file" name="firmware" accept=".bin" required>
+        <button type="submit">Upload Firmware</button>
+    </form>
+
+    <p id="upload-status"></p>
+
+    <hr>
+
+    <!-- Trigger OTA Update -->
+    <h2>OTA Update</h2>
+    <button id="ota-update-btn">Trigger OTA Update</button>
+    <p id="ota-status"></p>
+
+    <hr>
+
+    <!-- Motor Mode Toggle -->
+    <h2>Motor Control Mode</h2>
+    <label for="mode-toggle">Toggle Mode: </label>
+    <select id="mode-toggle">
+        <option value="manual">Manual</option>
+        <option value="scheduled">Scheduled</option>
+    </select>
+
+    <button id="set-mode-btn">Set Motor Mode</button>
+    <p id="mode-status"></p>
+
+    <hr>
+
+    <!-- Schedule Form -->
+    <h2>Set Motor Schedule</h2>
+    <form id="schedule-form">
+        <label for="time-period">Time Period (milliSec): </label>
+        <input type="number" id="time-period" name="time_period" required><br><br>
+
+        <label for="duration">Duration (milliSec): </label>
+        <input type="number" id="duration" name="duration" required><br><br>
+
+        <button type="submit">Send Schedule</button>
+    </form>
+    <p id="schedule-status"></p>
+
+    <script>
+        // Handle Firmware Upload
+        $('#firmware-form').on('submit', function(e) {
+            e.preventDefault();
+            var formData = new FormData(this);
+            $.ajax({
+                url: '/upload_firmware',
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(response) {
+                    $('#upload-status').text(response.message).css('color', 'green');
+                },
+                error: function(response) {
+                    $('#upload-status').text(response.responseJSON.message).css('color', 'red');
+                }
+            });
+        });
+
+        // Trigger OTA Update
+        $('#ota-update-btn').on('click', function() {
+            $.ajax({
+                url: '/trigger_ota_update',
+                type: 'POST',
+                success: function(response) {
+                    $('#ota-status').text(response.message).css('color', 'green');
+                },
+                error: function(response) {
+                    $('#ota-status').text(response.responseJSON.message).css('color', 'red');
+                }
+            });
+        });
+
+        // Set Motor Mode (Manual/Scheduled)
+        $('#set-mode-btn').on('click', function() {
+            var mode = $('#mode-toggle').val();
+            $.ajax({
+                url: '/set_motor_mode',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ "mode": mode }),
+                success: function(response) {
+                    $('#mode-status').text(response.message).css('color', 'green');
+                },
+                error: function(response) {
+                    $('#mode-status').text(response.responseJSON.message).css('color', 'red');
+                }
+            });
+        });
+
+        // Handle Schedule Form
+        $('#schedule-form').on('submit', function(e) {
+            e.preventDefault();
+            var timePeriod = $('#time-period').val();
+            var duration = $('#duration').val();
+
+            $.ajax({
+                url: '/send_schedule',
+                type: 'POST',
+                data: {
+                    time_period: timePeriod,
+                    duration: duration
+                },
+                success: function(response) {
+                    $('#schedule-status').text(response.message).css('color', 'green');
+                },
+                error: function(response) {
+                    $('#schedule-status').text(response.responseJSON.message).css('color', 'red');
+                }
+            });
+        });
+    </script>
+
+</body>
+</html>

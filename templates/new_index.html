@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ESP32 OTA and Motor Control</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        #motor-status-text {
+            margin-left: 10px;
+            font-weight: bold;
+            color: gray;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>ESP32 OTA Update & Motor Control</h1>
+
+    <!-- Upload firmware -->
+    <h2>Upload Firmware</h2>
+    <form id="firmware-form" enctype="multipart/form-data">
+        <input type="file" name="firmware" accept=".bin" required>
+        <button type="submit">Upload Firmware</button>
+    </form>
+    <p id="upload-status"></p>
+
+    <hr>
+
+    <!-- Trigger OTA Update -->
+    <h2>OTA Update</h2>
+    <button id="ota-update-btn">Trigger OTA Update</button>
+    <p id="ota-status"></p>
+
+    <hr>
+
+    <!-- Motor Mode Buttons -->
+    <h2>Motor Control</h2>
+    <button id="drive-motor-btn">Drive Motor</button>
+    <span id="motor-status-text">Motor OFF</span>
+    <button id="schedule-motor-btn">Schedule</button>
+    <p id="mode-status"></p>
+
+    <hr>
+
+    <!-- Schedule Form -->
+    <h2>Set Motor Schedule</h2>
+    <form id="schedule-form">
+        <label for="time-period">Time Period (milliSec): </label>
+        <input type="number" id="time-period" name="time_period" required><br><br>
+
+        <label for="duration">Duration (milliSec): </label>
+        <input type="number" id="duration" name="duration" required><br><br>
+
+        <button type="submit">Send Schedule</button>
+    </form>
+    <p id="schedule-status"></p>
+
+    <script>
+        // Firmware Upload
+        $('#firmware-form').on('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            $.ajax({
+                url: '/upload_firmware',
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(res) {
+                    $('#upload-status').text(res.message).css('color', 'green');
+                },
+                error: function(res) {
+                    $('#upload-status').text(res.responseJSON.message).css('color', 'red');
+                }
+            });
+        });
+
+        // OTA Trigger
+        $('#ota-update-btn').on('click', function() {
+            $.ajax({
+                url: '/trigger_ota_update',
+                type: 'POST',
+                success: function(res) {
+                    $('#ota-status').text(res.message).css('color', 'green');
+                },
+                error: function(res) {
+                    $('#ota-status').text(res.responseJSON.message).css('color', 'red');
+                }
+            });
+        });
+
+        // Motor Mode: Drive
+        $('#drive-motor-btn').on('click', function() {
+            $.ajax({
+                url: '/set_motor_mode',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ mode: 'manual' }),
+                success: function(res) {
+                    $('#mode-status').text(res.message).css('color', 'green');
+                },
+                error: function(res) {
+                    $('#mode-status').text(res.responseJSON.message).css('color', 'red');
+                }
+            });
+        });
+
+        // Motor Mode: Schedule
+        $('#schedule-motor-btn').on('click', function() {
+            $.ajax({
+                url: '/set_motor_mode',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ mode: 'scheduled' }),
+                success: function(res) {
+                    $('#mode-status').text(res.message).css('color', 'green');
+                },
+                error: function(res) {
+                    $('#mode-status').text(res.responseJSON.message).css('color', 'red');
+                }
+            });
+        });
+
+        // Schedule Submission
+        $('#schedule-form').on('submit', function(e) {
+            e.preventDefault();
+            const timePeriod = $('#time-period').val();
+            const duration = $('#duration').val();
+            $.ajax({
+                url: '/send_schedule',
+                type: 'POST',
+                data: {
+                    time_period: timePeriod,
+                    duration: duration
+                },
+                success: function(res) {
+                    $('#schedule-status').text(res.message).css('color', 'green');
+                },
+                error: function(res) {
+                    $('#schedule-status').text(res.responseJSON.message).css('color', 'red');
+                }
+            });
+        });
+
+        // Real-time Motor Status via Socket.IO
+        window.onload = function () {
+            const socket = io();
+            socket.on("motor_ack", function(data) {
+                const statusText = document.getElementById("motor-status-text");
+                const isActive = (
+                    data.status === true ||
+                    data.status === "True" ||
+                    data.status === "true"
+                );
+                statusText.textContent = isActive ? "Motor ON" : "Motor OFF";
+                statusText.style.color = isActive ? "green" : "gray";
+            });
+        };
+    </script>
+
+</body>
+</html>
