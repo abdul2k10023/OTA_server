@@ -13,10 +13,15 @@ FIRMWARE_FILE = 'firmware.bin'
 
 MQTT_BROKER = "10.144.0.143"
 MQTT_PORT = 1884
+
+# Topics
 MQTT_ACK_TOPIC = "esp32/motor/ack"
 MQTT_SCHEDULE_TOPIC = "esp32/motor/schedule"
 MQTT_OTA_TOPIC = "esp32/ota/command"
+MQTT_OTA_ACK_TOPIC = "esp32/ota/ack"
 MQTT_MOTOR_CMD_TOPIC = "esp32/motor/command"
+MQTT_HUMIDITY_TOPIC = "esp32/motor/humidity"
+
 
 # Global MQTT client
 mqtt_client = mqtt.Client()
@@ -42,6 +47,7 @@ def trigger_ota_update():
     payload = json.dumps({"cmd": 1})
     result = mqtt_client.publish(MQTT_OTA_TOPIC, payload)
     if result.rc == mqtt.MQTT_ERR_SUCCESS:
+        socketio.emit("ota_ack", {"status": "waiting"})
         return jsonify({"status": "success", "message": "OTA update command sent!"})
     else:
         return jsonify({"status": "error", "message": "Failed to send OTA update command!"}), 500
@@ -79,16 +85,54 @@ def send_schedule():
 def serve_firmware():
     return send_from_directory(FIRMWARE_DIR, FIRMWARE_FILE)
 
+
+@app.route('/send_humidity', methods=['POST'])
+def send_humidity():
+    data = request.get_json(silent=True) or {}
+    if 'humidity' not in data:
+        return jsonify({"status": "error", "message": "Missing 'humidity' field"}), 400
+
+    try:
+        # force int
+        humidity = int(data['humidity'])
+    except (ValueError, TypeError):
+        return jsonify({"status": "error", "message": "'humidity' must be an integer"}), 400
+
+    # Optional bounds check (keep if useful)
+    if humidity < 0 or humidity > 100:
+        return jsonify({"status": "error", "message": "'humidity' must be between 0 and 100"}), 400
+
+    payload = json.dumps({"humidity": humidity})
+    result = mqtt_client.publish(MQTT_HUMIDITY_TOPIC, payload)
+
+    if result.rc == mqtt.MQTT_ERR_SUCCESS:
+        return jsonify({"status": "success", "message": f"Humidity sent: {payload}"})
+    else:
+        return jsonify({"status": "error", "message": "Failed to send humidity!"}), 500
+
+
 # MQTT Callbacks
 def on_connect(client, userdata, flags, rc):
     print("MQTT connected with result code", rc)
     client.subscribe(MQTT_ACK_TOPIC)
+    client.subscribe(MQTT_OTA_ACK_TOPIC)
 
 def on_message(client, userdata, msg):
+    
     try:
         payload = json.loads(msg.payload.decode())
-        print(payload)
-        socketio.emit("motor_ack", {"status": payload.get("status")})
+        print(f"MQTT Message on {msg.topic}: {payload}")
+
+        # Motor acknowledgment
+        if msg.topic == MQTT_ACK_TOPIC:
+            socketio.emit("motor_ack", {"status": payload.get("status")})
+
+        # OTA acknowledgment
+        elif msg.topic == MQTT_OTA_ACK_TOPIC:
+            ota_status = payload.get("OTA_Status", "").lower()
+            if ota_status in ["ota updated", "ota failed"]:
+                socketio.emit("ota_ack", {"status": ota_status})
+
     except Exception as e:
         print("Failed to parse MQTT message:", e)
 

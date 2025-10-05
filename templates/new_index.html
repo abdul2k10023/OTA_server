@@ -32,6 +32,8 @@
     <h2>OTA Update</h2>
     <button id="ota-update-btn">Trigger OTA Update</button>
     <p id="ota-status"></p>
+    <!-- OTA Indicator -->
+    <div id="ota-status-text">OTA Status: <span style="color:gray;">Idle</span></div>
 
     <hr>
 
@@ -56,6 +58,18 @@
         <button type="submit">Send Schedule</button>
     </form>
     <p id="schedule-status"></p>
+
+    <hr>
+
+    <!-- Humidity Publish -->
+    <h2>Send Humidity</h2>
+    <form id="humidity-form">
+    <label for="humidity-input">Humidity (%): </label>
+    <input type="number" id="humidity-input" name="humidity" min="0" max="100" step="1" required>
+    <button type="submit">Send Humidity</button>
+    </form>
+    <p id="humidity-status"></p>
+
 
     <script>
         // Firmware Upload
@@ -89,6 +103,20 @@
                     $('#ota-status').text(res.responseJSON.message).css('color', 'red');
                 }
             });
+        });
+
+        // Listener to sockets
+        const socket = io();
+        // For OTA ACK
+        socket.on("ota_ack", function(data) {
+            const statusElem = document.getElementById("ota-status-text");
+            if (data.status === "waiting") {
+                statusElem.innerHTML = 'OTA Status: <span style="color:orange;">Waiting...</span>';
+            } else if (data.status === "ota updated") {
+                statusElem.innerHTML = 'OTA Status: ✅ <span style="color:green;">Updated Successfully</span>';
+            } else if (data.status === "ota failed") {
+                statusElem.innerHTML = 'OTA Status: ❌ <span style="color:red;">Update Failed</span>';
+            }
         });
 
         // Motor Mode: Drive
@@ -143,6 +171,27 @@
                 }
             });
         });
+
+        // Humidity Submission
+        $('#humidity-form').on('submit', function(e) {
+            e.preventDefault();
+            const humidityVal = parseInt($('#humidity-input').val(), 10);
+
+            $.ajax({
+                url: '/send_humidity',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ humidity: humidityVal }),
+                success: function(res) {
+                    $('#humidity-status').text(res.message).css('color', 'green');
+                },
+                error: function(res) {
+                    const msg = res.responseJSON && res.responseJSON.message ? res.responseJSON.message : 'Failed to send humidity';
+                    $('#humidity-status').text(msg).css('color', 'red');
+                }
+            });
+        });
+
 
         // Real-time Motor Status via Socket.IO
         window.onload = function () {
